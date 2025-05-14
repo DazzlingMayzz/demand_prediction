@@ -94,7 +94,6 @@ def reshape_monthly_predictions(monthly_predictions):
         - M+2月预测需求量
         - M+3月预测需求量
     """
-    import pandas as pd
     
     # 将预测结果重塑为宽格式，每个月份一列
     predictions_wide = monthly_predictions.pivot_table(

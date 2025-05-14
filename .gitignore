@@ -59,4 +59,7 @@ log/
 
 # 系统文件
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# 模型评估结果
+model_evaluation_*csv

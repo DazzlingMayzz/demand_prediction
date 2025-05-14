@@ -8,7 +8,7 @@ import time
 def main():
     start_time = time.time()
     print("=" * 50)
-    print("离散制造行业产品物料需求智能预测系统")
+    print("离散制造行业产品物料需求智能预测")
     print("=" * 50)
     
     # 创建models目录（如果不存在）

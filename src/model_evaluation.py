@@ -17,10 +17,7 @@ def evaluate_model(y_true, y_pred):
     mae = mean_absolute_error(y_true, y_pred)
     print(f"模型效果评估：\nRMSE:{rmse}\nMAE:{mae}")
     
-    return {
-        'RMSE': rmse,
-        'MAE': mae
-    }
+    return rmse,mae
 
 def print_evaluation_results(evaluation_results):
     """
