@@ -26,16 +26,12 @@ def main():
 
     # 训练预测模型
     print("\n[3/4] 模型训练阶段")
-    model = train_model(*split_data(processed_demand))
+    best_model, trained_models = train_model(*split_data(processed_demand))
     
-    # 保存模型
-    model_path = 'models/forecast_model.joblib'
-    save_model(model, model_path)
-    print(f"模型已保存到 {model_path}")
 
     # 预测未来3个月的需求
     print("\n[4/4] 需求预测阶段")
-    predictions = predict_future_demand(model, processed_demand)
+    predictions = predict_future_demand(best_model, processed_demand)
     
     # 计算总耗时
     end_time = time.time()

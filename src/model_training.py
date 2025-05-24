@@ -6,10 +6,28 @@ from sklearn.metrics import mean_squared_error
 from lightgbm import LGBMRegressor
 from xgboost import XGBRegressor
 import lightgbm as lgb
-from model_evaluation import evaluate_model
+from src.model_evaluation import evaluate_model, visualize_predictions, save_prediction_with_features
 import os
 from datetime import datetime
 import time
+from tabulate import tabulate
+
+def normalize_feature_importance(importances):
+    """
+    归一化特征重要性
+    
+    Args:
+        importances: 原始特征重要性数组
+        
+    Returns:
+        归一化后的特征重要性数组
+    """
+    # 确保所有值都是非负的
+    importances = np.abs(importances)
+    # 归一化到0-1范围
+    if importances.sum() > 0:
+        importances = importances / importances.sum()
+    return importances
 
 def train_model(X_train, y_train, X_test, y_test):
     """
@@ -31,11 +49,17 @@ def train_model(X_train, y_train, X_test, y_test):
     
     # 创建输出目录
     output_dir = 'output'
+    models_dir = 'models'
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+    if not os.path.exists(models_dir):
+        os.makedirs(models_dir)
     
     # 创建评估结果列表
     evaluation_results = []
+    
+    # 获取当前时间戳
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     
     # 1. 定义多个模型
     models = {
@@ -77,6 +101,8 @@ def train_model(X_train, y_train, X_test, y_test):
     # 2. 训练并评估每个模型
     best_model = None
     best_score = float('-inf')
+    best_model_name = None
+    trained_models = {}
     
     for name, model in models.items():
         print(f"\n训练 {name} 模型...")
@@ -104,9 +130,34 @@ def train_model(X_train, y_train, X_test, y_test):
         train_score = model.score(X_train, y_train)
         test_score = model.score(X_test, y_test)
         
+        # 确保预测值非负
+        train_predictions = np.maximum(model.predict(X_train), 0)
+        test_predictions = np.maximum(model.predict(X_test), 0)
+        
         # 计算均方误差
-        train_rmse, train_mae = evaluate_model(y_train, model.predict(X_train))
-        test_rmse, test_mae = evaluate_model(y_test, model.predict(X_test))
+        train_rmse, train_mae = evaluate_model(y_train, train_predictions, step='train')
+        test_rmse, test_mae = evaluate_model(y_test, test_predictions, step='test')
+        
+        # 可视化预测结果
+        print(f"\n{name} 模型预测结果可视化：")
+        # 保存验证集预测结果图表
+        viz_path = os.path.join(output_dir, f'{name}_predictions_{timestamp}.png')
+        visualize_predictions(
+            y_test, 
+            test_predictions,
+            model_name=name,
+            save_path=viz_path
+        )
+        
+        # 保存预测结果（含原始特征）
+        prediction_path = os.path.join(output_dir, f'{name}_test_predictions_{timestamp}.csv')
+        save_prediction_with_features(
+            X_test,
+            y_test,
+            test_predictions.round(2),
+            model_name=name,
+            save_path=prediction_path
+        )
         
         print(f"{name} 模型:")
         print(f"训练集 R2 分数: {train_score:.4f}")
@@ -125,44 +176,91 @@ def train_model(X_train, y_train, X_test, y_test):
             '训练时间(秒)': train_time
         })
         
+        # 保存模型
+        model_filename = f'{name}_{timestamp}.joblib'
+        model_path = os.path.join(models_dir, model_filename)
+        joblib.dump(model, model_path)
+        print(f"模型已保存到: {model_path}")
+        
+        # 显示特征重要性（如果模型支持）
+        if hasattr(model, 'feature_importances_'):
+            importances = model.feature_importances_
+            feature_names = X_train.columns
+            
+            # 归一化特征重要性
+            importances = normalize_feature_importance(importances)
+            
+            # 创建特征重要性DataFrame
+            feature_importance = pd.DataFrame({
+                '特征': feature_names,
+                '重要性': importances
+            })
+            
+            # 按重要性排序
+            feature_importance = feature_importance.sort_values('重要性', ascending=False)
+            
+            # 显示特征重要性表格
+            print(f"\n{name} 模型特征重要性:")
+            print(tabulate(
+                feature_importance,
+                headers='keys',
+                tablefmt='grid',
+                floatfmt='.4f',
+                showindex=False
+            ))
+            
+            # 保存特征重要性到文件
+            importance_path = os.path.join(output_dir, f'{name}_feature_importance_{timestamp}.csv')
+            feature_importance.to_csv(importance_path, index=False, encoding='utf-8-sig')
+            print(f"特征重要性已保存到: {importance_path}")
+        
         # 更新最佳模型
         if test_score > best_score:
             best_score = test_score
             best_model = model
+            best_model_name = name
             print(f"当前最佳模型: {name}")
     
     # 将评估结果保存到文件
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     evaluation_df = pd.DataFrame(evaluation_results)
     evaluation_file = os.path.join(output_dir, f'model_evaluation_{timestamp}.csv')
     evaluation_df.to_csv(evaluation_file, index=False, encoding='utf-8-sig')
-    print(f"\n模型评估结果已保存到: {evaluation_file}")
     
-    # 3. 特征重要性分析
-    if hasattr(best_model, 'feature_importances_'):
-        importances = best_model.feature_importances_
-        feature_names = X_train.columns
-        
-        # 创建特征重要性DataFrame
-        feature_importance = pd.DataFrame({
-            'feature': feature_names,
-            'importance': importances
-        })
-        
-        # 按重要性排序
-        feature_importance = feature_importance.sort_values('importance', ascending=False)
-        
-        # 打印前10个最重要的特征
-        print("\n前10个最重要的特征:")
-        print(feature_importance.head(10))
-        
-        # 保存特征重要性到文件
-        feature_importance.to_csv('data/feature_importance.csv', index=False)
+    # 打印评估结果表格
+    print("\n" + "="*80)
+    print("模型评估结果汇总")
+    print("="*80)
+    
+    # 格式化评估结果表格
+    summary_table = evaluation_df.copy()
+    # 重命名列以使其更易读
+    summary_table = summary_table.rename(columns={
+        '模型名称': '模型',
+        '训练集_R2': '训练集 R²',
+        '测试集_R2': '测试集 R²',
+        '训练集_RMSE': '训练集 RMSE',
+        '测试集_RMSE': '测试集 RMSE',
+        '训练集_MAE': '训练集 MAE',
+        '测试集_MAE': '测试集 MAE',
+        '训练时间(秒)': '训练时间(秒)'
+    })
+    
+    # 设置显示格式
+    pd.set_option('display.float_format', lambda x: '%.4f' % x)
+    
+    # 打印表格
+    print("\n", tabulate(
+        summary_table,
+        headers='keys',
+        tablefmt='grid',
+        showindex=False,
+        floatfmt='.4f'
+    ))
+    
+    print("\n" + "="*80)
+    print(f"最佳模型: {best_model_name}")
+    print(f"最佳测试集 R² 分数: {best_score:.4f}")
+    print("="*80 + "\n")
     
     print("\n模型训练完成")
-    return best_model
-
-def save_model(model, filename):
-    print(f"正在保存模型到 {filename}...")
-    joblib.dump(model, filename)
-    print("模型保存完成")
+    return best_model, trained_models

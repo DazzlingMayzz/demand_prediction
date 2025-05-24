@@ -3,7 +3,7 @@ import numpy as np
 import joblib
 from datetime import datetime, timedelta
 import os
-from utils import aggregate_daily_to_monthly, reshape_monthly_predictions, format_predictions
+from src.utils import aggregate_daily_to_monthly, reshape_monthly_predictions, format_predictions
 from tqdm import tqdm
 
 def predict_future_demand(model, demand_data, output_path='output/predictions.csv'):

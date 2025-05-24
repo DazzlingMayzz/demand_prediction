@@ -63,3 +63,4 @@ Thumbs.db
 
 # 模型评估结果
 model_evaluation_*csv
+output/
